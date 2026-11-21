@@ -1,186 +1,219 @@
-# Snort Intrusion Detection | Network Monitoring & Alert Analysis
+# Snort Intrusion Detection | Custom Rules, Traffic Monitoring & Alert Analysis
 
-[![Snort](https://img.shields.io/badge/Snort-IDS-CC1F2F?style=flat-square)](https://www.snort.org/) [![Linux](https://img.shields.io/badge/Linux-Ubuntu-E95420?style=flat-square&logo=ubuntu&logoColor=white)](https://ubuntu.com/) [![Kali Linux](https://img.shields.io/badge/Kali-Linux-557C94?style=flat-square&logo=kalilinux&logoColor=white)](https://www.kali.org/) [![VirtualBox](https://img.shields.io/badge/VirtualBox-Lab-183A61?style=flat-square)](https://www.virtualbox.org/) [![Nmap](https://img.shields.io/badge/Nmap-Network_Testing-3572A5?style=flat-square)](https://nmap.org/)
+[![Snort](https://img.shields.io/badge/Snort-IDS-B52A2A?style=for-the-badge)](https://www.snort.org/) [![Ubuntu](https://img.shields.io/badge/Ubuntu-Server-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/) [![Kali Linux](https://img.shields.io/badge/Kali-Linux-557C94?style=for-the-badge&logo=kalilinux&logoColor=white)](https://www.kali.org/) [![VirtualBox](https://img.shields.io/badge/Oracle-VirtualBox-183A61?style=for-the-badge)](https://www.virtualbox.org/) [![Nmap](https://img.shields.io/badge/Nmap-Discovery-3572A5?style=for-the-badge)](https://nmap.org/)
 
-**Documented by:** Alexander Cox  
-**Project type:** Controlled cybersecurity home-lab exercise  
-**Focus:** Network intrusion detection, ICMP monitoring, Snort configuration validation, alert interpretation, and service reconnaissance.
+**Author:** Alexander Cox  
+**Project type:** Controlled cybersecurity home lab  
+**Focus:** Snort IDS configuration, custom rule development, ICMP/SSH event detection, packet-log analysis, and network testing.
 
-> **Evidence standard:** All screenshots come from `Cyber Home Lab Doc 1.docx`. The steps below distinguish *documented commands/results* from *suggested follow-up checks*. This lab demonstrates **Snort detection and alert visibility**, not verified traffic blocking.
+> **Evidence:** This project is built exclusively from Snort-related screenshots in `Cyber Home Lab Doc 1.docx`. The original report also contains pfSense work, but **no pfSense screenshots or firewall claims are included here**. The evidence shows detection and alert generation, not demonstrated traffic blocking.
 
-## 1. Project overview
+## Project overview
 
-I prepared a Linux virtual machine for Snort-based network monitoring and used Kali Linux to generate and investigate network activity. I validated that the Snort configuration loaded successfully, ran the IDS against a specified network interface, and examined alerts produced for ICMP traffic between test hosts. A separate Nmap TCP SYN scan checked which services were reachable on the lab endpoint.
+I built a Snort intrusion detection lab using an Ubuntu Server virtual machine in Oracle VirtualBox, with Kali Linux acting as a test workstation. I configured the Snort 2.x rule engine, set the protected subnet, wrote **five custom Snort signatures**, generated controlled network traffic, and compared IDS alerts with the activity performed during testing.
 
-The goal was to develop hands-on understanding of **how a signature-based network IDS processes traffic, generates alerts, and supports an analyst's investigation**.
+Rather than stopping at an installation screenshot, this repository documents the actual **detection logic**, its meaning, and the screenshots that show what worked.
 
 ### Objectives
 
-- Prepare an Ubuntu-based Snort VM in Oracle VirtualBox.
-- Identify the host and lab-facing network interfaces.
-- Verify connectivity before monitoring traffic.
-- Validate Snort configuration and rule loading.
-- Run Snort in live console-alert mode.
-- Interpret alert timestamps, signatures, priority, and source/destination IPs.
-- Understand basic saved-log inspection and Nmap validation.
+- Prepare an Ubuntu Server VM for network monitoring.
+- Configure `HOME_NET` so Snort knows the protected network.
+- Create, expand, and test custom rules in `/etc/snort/rules/local.rules`.
+- Validate configuration before running Snort live.
+- Produce and analyze normal ICMP and oversized ICMP alerts.
+- Detect TCP connections to SSH and inspect related scan output.
+- Explore saved Snort packet logs and differentiate detection from prevention.
 
-### Tools and their roles
+### Tools
 
-| Tool | Lab purpose |
+| Technology | Purpose |
 |---|---|
-| Oracle VirtualBox | Host the Linux VMs and configure virtual adapters. |
-| Ubuntu Server / SnortVM | Run the Snort IDS sensor. |
-| Snort 2.9.20 | Load IDS configuration/rules and report matching traffic. |
-| Kali Linux | Generate ICMP traffic and run authorized scans. |
-| `ip address` | View active interfaces and assigned IP addresses. |
-| `ping` | Confirm ICMP reachability and create monitored traffic. |
-| Nmap | Identify the reachable TCP service on a controlled endpoint. |
+| Oracle VirtualBox | Runs the isolated virtual machines and network adapters. |
+| Ubuntu Server / SnortVM | Snort monitoring sensor. |
+| **Snort 2.9.20** | Rule-based network intrusion detection and console alerts. |
+| Kali Linux | Authorized test traffic, ping, SSH and Nmap. |
+| GNU nano | Editing `snort.conf` and `local.rules`. |
+| Nmap | Verifying the test host's reachable TCP services. |
 
----
-
-## 2. Lab layout and IP addressing
-
-The source screenshots were captured during **different configuration stages**. This is a *logical* overview of the evidenced hosts, not a claim that every address was simultaneously active or every network was bridged together.
+## Lab topology and observed IP addresses
 
 ```text
-                         Windows host PC
-                               |
-                         Oracle VirtualBox
-                               |
-                    Virtualized lab environment
-                               |
-             +-----------------+------------------+
-             |                                    |
-        Kali Linux                          Ubuntu / SnortVM
-        -----------                         ----------------
-        eth1: 172.30.1.20/24                enp0s8: 172.30.1.23/24
-        eth0: 192.168.100.207/24            (installer-stage address)
-                                             enp0s3: 192.168.100.216/24
-                                             Snort capture: enp0s8
-             |
-             +--- ping / Nmap ---> 172.30.1.26
-                                    (later observed test endpoint)
+              Windows host / Oracle VirtualBox
+                           |
+                   Virtual lab network
+                      172.30.1.0/24
+                           |
+          +----------------+----------------+
+          |                |                |
+      Kali Linux       Ubuntu SnortVM    Test endpoint
+      172.30.1.20      enp0s8:           172.30.1.26
+      (test host)      172.30.1.23*       (ping / SSH /
+                        IDS sensor         Nmap target)
 
-       Snort alert evidence: 172.30.1.20 <--> 172.30.1.26
+          Kali  ------ ICMP / TCP ------>  test endpoint
+                       Snort captures on enp0s8
+
+      *172.30.1.23 is an installer-stage SnortVM address.
+       Later .26 traffic is visible, but the report does not
+       conclusively map every VM to a fixed final IP.
 ```
 
-**Addressing notes:** The Ubuntu installer shows `enp0s8` as `172.30.1.23`, whereas subsequent connectivity and Snort screenshots reference `172.30.1.26`. The report does not show the exact point at which that address changed or definitively identify the later endpoint. Kali also has another adapter on `192.168.100.0/24`. The adapter modes and final routing therefore should not be treated as one permanently confirmed topology.
+**Important:** The IPs are documented observations, not a guarantee that every VM retained the same address or network attachment across the entire lab. In one screenshot, Kali's `eth0` also uses `192.168.100.207/24`, a separate subnet.
 
-![VirtualBox SnortVM hardware](screenshots/01-snort-vm-virtualbox-settings.png)
+### Verified network settings
 
-*Figure 1 — VirtualBox configuration for `SnortVM(IDS)`: Ubuntu 64-bit, 4 GB RAM, two virtual CPUs, and a 45 GB virtual disk.*
+| Item | Recorded value | Evidence |
+|---|---|---|
+| Protected Snort subnet | `172.30.1.0/24` | `snort.conf` screenshot |
+| Kali lab interface | `eth1: 172.30.1.20/24` | `ip address` output |
+| Snort capture interface | `enp0s8` | Snort live-monitoring command |
+| Ubuntu installer-stage IP | `172.30.1.23/24` | Ubuntu network installation screen |
+| Traffic-test destination | `172.30.1.26` | Ping, SSH and Nmap screenshots |
 
-![Kali VirtualBox internal network](screenshots/02-kali-internal-lab-network.png)
+![01 kali network interfaces](screenshots/01-kali-network-interfaces.png)
 
-*Figure 2 — One Kali VM adapter configured for VirtualBox's `VulnLabs` internal network; this alone does not establish every machine's final connectivity.*
+*Kali `ip address` output: eth1 on 172.30.1.20/24; eth0 on a separate subnet.*
 
 ---
 
-## 3. Implementation walkthrough
+## Walkthrough
 
-### Step 1 — Install Ubuntu Server for the sensor
+### 1. Prepare the Snort virtual machine
 
-The Linux-based IDS environment was prepared in a VirtualBox machine named **`SnortVM(IDS)`**. The hardware screenshot shows the VM allocated **4096 MB RAM**, **two virtual processors**, and a **45 GB** virtual disk.
+I prepared an Ubuntu Server virtual machine named `SnortVM(IDS)` in VirtualBox. The documented machine had an Ubuntu 64-bit guest configuration with virtual CPU, memory and disk resources. The Ubuntu installer and its network-adapter screen show the server being prepared for packet monitoring.
 
-During the installation, Ubuntu Server's full installation option was selected. A subsequent installer screen displayed two network interfaces:
+The separate installer and running-system screenshots are kept as evidence of the build process; they should not be interpreted as proof that the installer ISO version and the final running Ubuntu release were identical.
 
-| Interface | Observed installer IP | Intended significance |
-|---|---|---|
-| `enp0s3` | `192.168.100.216/24` | A network adapter visible on the `192.168.100.0/24` subnet. |
-| `enp0s8` | `172.30.1.23/24` | The lab-facing interface later named by Snort's capture command. |
+![02 snortvm virtualbox overview](screenshots/02-snortvm-virtualbox-overview.png)
 
-![Ubuntu Server installation](screenshots/03-snortvm-ubuntu-installation.png)
+*VirtualBox configuration of SnortVM(IDS), its Ubuntu guest OS and allocated resources.*
 
-*Figure 3 — Ubuntu Server installation in the `SnortVM(IDS)` VM.*
+![03 ubuntu server download](screenshots/03-ubuntu-server-download.png)
 
-![Ubuntu installer network interfaces](screenshots/04-snortvm-installer-network-settings.png)
+*Ubuntu Server download page consulted during lab preparation.*
 
-*Figure 4 — Both detected network interfaces and their installer-stage DHCP addresses.*
+![04 ubuntu server install options](screenshots/04-ubuntu-server-install-options.png)
 
-The post-install terminal identifies the running system as **Ubuntu 24.04.5 LTS**, and shows the following command:
+*Ubuntu Server installation-option screen.*
 
-```bash
-sudo apt-get update
-```
+![05 ubuntu installer network configuration](screenshots/05-ubuntu-installer-network-configuration.png)
 
-| Part | Meaning |
-|---|---|
-| `sudo` | Run the command with administrative privileges. |
-| `apt-get` | The Debian/Ubuntu package-management command-line utility. |
-| `update` | Refresh the local package-index metadata from configured repositories; it **does not** install all available upgrades. |
+*Ubuntu installer showing available virtual network interfaces.*
 
-**Observed result:** The package-index refresh completed without an error visible in the screenshot. This is system preparation evidence—not proof of a particular Snort installation command.
+![06 ubuntu installation progress](screenshots/06-ubuntu-installation-progress.png)
 
-![Ubuntu post-install terminal](screenshots/05-ubuntu-post-install-update.png)
+*Ubuntu Server installation/progress screen.*
 
-*Figure 5 — Booted Ubuntu 24.04.5 LTS and the `apt-get update` package-index refresh.*
+![07 ubuntu server post install setup](screenshots/07-ubuntu-server-post-install-setup.png)
 
-> **Version note:** A VirtualBox screenshot shows a mounted Ubuntu `26.04.1` installer ISO, while the later booted terminal identifies `24.04.5 LTS`. The exact reinstall/ISO-change sequence is not documented, so the runtime OS version is taken from the terminal, not inferred from the mounted ISO.
+*Ubuntu Server console following installation.*
 
-### Step 2 — Review Kali's interfaces and verify connectivity
+**Why this step matters:** The IDS needs an operational Linux host and visibility into the virtual network. The interface later referenced in the Snort command is `enp0s8`; selecting the wrong interface can result in no relevant traffic being observed.
 
-Kali was used as the testing workstation. The source terminal shows:
+### 2. Confirm connectivity from Kali
 
-```bash
-ip address
-```
-
-The output includes **`eth1 = 172.30.1.20/24`** and **`eth0 = 192.168.100.207/24`** for that stage of the lab. The `eth1` network address is relevant to the later Snort ICMP alerts.
-
-![Kali IP interface output](screenshots/06-kali-network-interface-ip.png)
-
-*Figure 6 — Kali `ip address` output showing the two interfaces and their separate subnets.*
-
-I then checked basic connectivity to a lab endpoint:
+From Kali Linux, I generated traffic toward the lab endpoint:
 
 ```bash
 ping 172.30.1.26
 ```
 
-| Item | Meaning |
-|---|---|
-| `ping` | Sends ICMP Echo Requests and waits for Echo Replies. |
-| `172.30.1.26` | The target IP observed in the test. |
-| `icmp_seq` | Sequence number for each echo request/reply. |
-| `time` | Measured round-trip latency for a reply. |
+`ping` sends ICMP Echo Requests to the destination and reports the replies and round-trip times. The screenshot shows **5 packets transmitted, 5 received, 0% packet loss**. This establishes reachability between the tested systems at that time; it does not prove that every VM was on one network.
 
-**Observed result:** **Five ICMP packets transmitted, five received, 0% packet loss.** This confirmed IP-level connectivity for that test. It does not by itself verify that all virtual-network adapters or routes were configured correctly for every VM.
+![08 kali ping test](screenshots/08-kali-ping-test.png)
 
-![Ping validation](screenshots/07-kali-ping-172-30-1-26.png)
+*Kali successfully pinging 172.30.1.26 with five replies and zero packet loss.*
 
-*Figure 7 — Successful Kali connectivity test to `172.30.1.26`.*
+### 3. Configure Snort's protected network
 
-### Step 3 — Validate Snort configuration
+Snort reads its settings from `/etc/snort/snort.conf`. I opened the file with GNU nano:
 
-The Snort console shows **Snort 2.9.20 GRE (Build 82)**, initialization details and the message:
-
-```text
-Snort successfully validated the configuration!
+```bash
+sudo nano /etc/snort/snort.conf
 ```
 
-The configuration-test command visible at the prompt is:
+- `sudo`: opens the file with administrator permissions.
+- `nano`: a terminal-based text editor.
+- `/etc/snort/snort.conf`: Snort's main configuration file in this lab.
+
+The screenshot shows this setting:
+
+```snort
+ipvar HOME_NET 172.30.1.0/24
+```
+
+`HOME_NET` identifies the subnet being monitored/protected. Custom rules use `$HOME_NET` to avoid hardcoding the subnet repeatedly. The `172.30.1.0/24` prefix contains addresses from `172.30.1.0` through `172.30.1.255` (the usable host addresses normally exclude the network and broadcast addresses).
+
+**Note:** The screenshot also contains other network variables. Their exact values can vary between installations; only the displayed `HOME_NET` setting is presented here as a deliberate configuration choice.
+
+![09 snort conf edit in nano](screenshots/09-snort-conf-edit-in-nano.png)
+
+*Editing /etc/snort/snort.conf with GNU nano.*
+
+![10 snort home net settings](screenshots/10-snort-home-net-settings.png)
+
+*Snort HOME_NET set to 172.30.1.0/24 in snort.conf.*
+
+### 4. Validate Snort's configuration before monitoring
+
+The lab used the Snort test mode:
 
 ```bash
 sudo snort -T -i enp0s8 -c /etc/snort/snort.conf
 ```
 
-| Option | What it does |
+| Part | Function |
 |---|---|
-| `sudo` | Grants the privileges required to inspect the chosen capture interface. |
-| `snort` | Starts the Snort intrusion-detection engine. |
-| `-T` | Checks the configuration and rules for errors, then exits rather than monitoring continuously. |
-| `-i enp0s8` | Selects the network interface to inspect. |
-| `-c /etc/snort/snort.conf` | Specifies the configuration file to load. |
+| `sudo` | Uses the privileges needed for network capture and Snort configuration access. |
+| `snort` | Invokes the Snort IDS engine. |
+| `-T` | Tests configuration and rules without continuing into live monitoring. |
+| `-i enp0s8` | Selects the interface relevant to the lab. |
+| `-c /etc/snort/snort.conf` | Loads the specified Snort configuration. |
 
-**Why it matters:** A successful configuration test is an essential check before live IDS monitoring. It reduces the chance that a missing rules path, malformed rule, or incorrect configuration stops the sensor from starting. The screenshot establishes a successful Snort validation and shows a further `-T` command at the prompt; it does not show the entire file contents.
+The console identifies **Snort 2.9.20 GRE (Build 82)** and reports **“Snort successfully validated the configuration!”** This confirms the validated configuration loaded at that stage. It does not, by itself, verify that every later custom rule had already been added.
 
-![Snort validation terminal](screenshots/08-snort-config-validation.png)
+![11 snort configuration validation](screenshots/11-snort-configuration-validation.png)
 
-*Figure 8 — Snort 2.9.20 initialization and successful configuration validation.*
+*Snort 2.9.20 output reporting successful configuration validation.*
 
-### Step 4 — Monitor network traffic and inspect IDS alerts
+![12 snort rule engine initialization](screenshots/12-snort-rule-engine-initialization.png)
 
-The live monitoring command shown on the Snort terminal is:
+*Snort rule engine/initialization output from the validation workflow.*
+
+### 5. Write the first custom rule — ICMP detection
+
+The custom signatures were stored in:
+
+```text
+/etc/snort/rules/local.rules
+```
+
+The screenshot shows an initial user-defined ICMP rule:
+
+```snort
+alert icmp any any -> $HOME_NET any (msg:"ICMP has been Detected"; sid:1000001; rev:1;)
+```
+
+| Rule field | Meaning |
+|---|---|
+| `alert` | Generates an alert when the rule matches; it is not a drop action. |
+| `icmp` | Inspect ICMP packets. |
+| `any any` | Any source address / source port placeholder (ICMP has no TCP/UDP ports). |
+| `->` | Apply the rule in the source-to-destination direction. |
+| `$HOME_NET any` | Destination must be within the configured protected subnet; the port field is `any`. |
+| `msg` | Text displayed in Snort's alert. |
+| `sid:1000001` | Signature ID used to distinguish this custom rule. |
+| `rev:1` | Revision number of the rule. |
+
+This first rule intentionally matches a broad category of ICMP traffic. It is useful for controlled validation but would be noisy in a busy production network.
+
+![13 custom rule icmp initial](screenshots/13-custom-rule-icmp-initial.png)
+
+*First custom local.rules signature: ICMP detection, SID 1000001.*
+
+### 6. Run Snort in live alert mode
+
+I started the sensor with:
 
 ```bash
 sudo snort -q -l /var/log/snort -i enp0s8 -A console -c /etc/snort/snort.conf
@@ -188,129 +221,194 @@ sudo snort -q -l /var/log/snort -i enp0s8 -A console -c /etc/snort/snort.conf
 
 | Option | Explanation |
 |---|---|
-| `-q` | Suppresses much of the normal startup/status output. |
-| `-l /var/log/snort` | Sets the directory where Snort can write log output. |
-| `-i enp0s8` | Captures traffic from the specified interface. |
-| `-A console` | Sends alerts directly to the terminal. |
-| `-c` | Loads the chosen Snort configuration and configured rules. |
+| `-q` | Quiet mode, suppressing much of the startup output. |
+| `-l /var/log/snort` | Specifies the directory for saved logs. |
+| `-i enp0s8` | Captures packets on the selected interface. |
+| `-A console` | Prints alerts directly to the terminal. |
+| `-c` | Loads Snort's main configuration and referenced rules. |
 
-The alert output shows repeated ICMP events in **both directions** between `172.30.1.20` and `172.30.1.26`.
+The first screenshots show live ICMP events while Kali generated test packets. Alert messages include the custom SID and the communication endpoints, demonstrating that the rule was available to Snort during monitoring.
 
-**Signatures visible in the screenshot:**
+![14 local rules and monitor command](screenshots/14-local-rules-and-monitor-command.png)
 
-| Alert text | Observed identification | Interpretation |
-|---|---|---|
-| `ICMP PING speedera` | `[1:480:5]` | A Snort signature matching ICMP ping-related traffic. |
-| `Large ICMP Detected Alex` | `[1:1000002:1]` | A local/custom-looking signature or label for ICMP activity; exact rule condition is not shown. |
-| `ICMP has been Detected` | `[1:1000001:1]` | A separate ICMP alert, with rule metadata visible in the console. |
+*ICMP rule in local.rules and Snort live-monitoring command visible in terminal.*
 
-A Snort alert line typically presents a **timestamp**, **rule identifier** (`generator ID:signature ID:revision`), **message**, **classification/priority if set**, **protocol**, and **source → destination**. In this lab, the pattern was consistent with the ICMP connectivity traffic captured earlier.
+![15 initial icmp console alerts](screenshots/15-initial-icmp-console-alerts.png)
 
-![Live Snort ICMP alerts](screenshots/09-snort-console-icmp-alerts.png)
+*Snort console monitoring alongside Kali ping traffic.*
 
-*Figure 9 — Live Snort alerts for ICMP activity involving `172.30.1.20` and `172.30.1.26`.*
+### 7. Review stored packets
 
-**Observed result:** Snort **detected and reported** traffic matching enabled signatures. The screenshot is not evidence that traffic was dropped or that an IPS blocking policy was active. The local rules' exact contents cannot be reconstructed from alert text alone.
-
-### Step 5 — Prepare to review a saved Snort log
-
-A separate screenshot shows the following command typed at the SnortVM shell:
+The original lab also inspected a saved Snort log. A screenshot shows this command being prepared:
 
 ```bash
 sudo snort -v -r /var/log/snort/snort.log.1792625255 | less
 ```
 
-| Component | Explanation |
-|---|---|
-| `-v` | Requests verbose packet output. |
-| `-r /var/log/snort/snort.log.1792625255` | Reads packets from the named saved capture file instead of performing a fresh live capture. |
-| `| less` | Paginates the output for easier review. |
+- `-v`: print packet details verbosely.
+- `-r`: read packets from an existing capture file instead of live traffic.
+- `| less`: paginate the output for review.
 
-**Evidence limitation:** The screenshot shows the **command ready at the prompt**, not the resulting packet listing. I therefore document the log-review workflow but do not claim that a particular stored packet was recovered from the file.
+A separate screenshot shows ICMP **Echo Request (Type 8)** and **Echo Reply (Type 0)** records involving `172.30.1.20` and `172.30.1.26`. Together, these demonstrate basic packet-level inspection after the live test. The saved-log file is not distributed in this repository, so the screenshot is the available evidence.
 
-![Snort saved log review](screenshots/10-snort-saved-log-review-command.png)
+![16 snort saved log command](screenshots/16-snort-saved-log-command.png)
 
-*Figure 10 — Command prepared to read a saved Snort log using `less`.*
+*Command for reading a saved Snort packet log with less.*
 
-### Step 6 — Perform a separate Nmap service check
+![17 snort replayed icmp packets](screenshots/17-snort-replayed-icmp-packets.png)
 
-Kali also performed an authorized SYN scan of the lab endpoint:
+*Saved-log review showing ICMP Echo and Echo Reply packet data.*
+
+### 8. Develop an oversized-ICMP rule and test it
+
+I expanded the local rule set with a second signature:
+
+```snort
+alert icmp any any -> $HOME_NET any (msg:"Large ICMP Detected Alex"; dsize:>500; sid:1000002; rev:1;)
+```
+
+The new condition, **`dsize:>500`**, requires an ICMP packet payload exceeding 500 bytes. This makes it more selective than the first rule.
+
+Two tests appear in the Kali screenshot:
+
+```bash
+ping 172.30.1.26
+ping 172.30.1.26 -s 501
+```
+
+On Linux, `ping -s 501` requests **501 data bytes** in the ICMP Echo Request; the full ICMP packet is larger once headers are included. This provides a controlled packet size that should satisfy the `dsize` condition. The screenshots show successful echo replies for both standard and larger packets.
+
+Snort's console then displays **`[1:1000002:1] Large ICMP Detected Alex`** alongside the general ICMP rule (`1000001`) and a built-in ICMP signature. This is the strongest direct evidence in the lab that a custom condition was added and exercised.
+
+![18 icmp and large icmp rules](screenshots/18-icmp-and-large-icmp-rules.png)
+
+*Custom ICMP and large-payload ICMP rules, SIDs 1000001 and 1000002.*
+
+![19 kali standard and large ping](screenshots/19-kali-standard-and-large-ping.png)
+
+*Standard ping and ping -s 501 tests from Kali.*
+
+![20 large icmp alert results](screenshots/20-large-icmp-alert-results.png)
+
+*Snort alerts for standard and large ICMP packets, including the SID 1000002 rule.*
+
+### 9. Extend detection to FTP, SSH and a protected HTTP path
+
+The final `local.rules` screenshot contains **five custom signatures**. I transcribed their logic below for readability; the repo also includes a separate [`rules/local.rules`](rules/local.rules) file.
+
+```snort
+alert icmp any any -> $HOME_NET any (msg:"ICMP has been Detected"; sid:1000001; rev:1;)
+alert icmp any any -> $HOME_NET any (msg:"Large ICMP Detected Alex"; dsize:>500; sid:1000002; rev:1;)
+alert tcp any any -> $HOME_NET 21 (msg:"FTP connection detected"; sid:1000003; rev:1;)
+alert tcp any any -> $HOME_NET 22 (msg:"SSH connection detected"; sid:1000004; rev:1;)
+alert tcp any any -> $HOME_NET 80 (msg:"Attempt to get into protected page"; content:"GET"; content:"/alexanderadmin.php"; sid:1000005; rev:1;)
+```
+
+| SID | Purpose | How it matches | Verified test outcome |
+|---|---|---|---|
+| `1000001` | ICMP traffic | ICMP packet to `$HOME_NET` | Matching console alerts shown. |
+| `1000002` | Larger ICMP payloads | ICMP payload `>500` bytes | `ping -s 501` and matching alerts shown. |
+| `1000003` | FTP connections | TCP packets destined for port `21` on `$HOME_NET` | Rule definition shown; no clear matching FTP alert screenshot. |
+| `1000004` | SSH connections | TCP packets destined for port `22` on `$HOME_NET` | SSH attempt and matching alerts shown. |
+| `1000005` | Protected-path HTTP request | TCP traffic to port `80` containing `GET` and `/alexanderadmin.php` | Rule definition shown; no clear matching HTTP alert screenshot. |
+
+**Detection design caveats:** These are introductory signature examples. A TCP packet to port `21`/`22` is not proof of a successful FTP or SSH login. The HTTP rule uses raw content strings and does not by itself provide robust HTTP transaction parsing, and unencrypted HTTP only is addressed. In production, signatures would need protocol-aware refinement, context and tuning to reduce false positives.
+
+![21 five custom snort rules](screenshots/21-five-custom-snort-rules.png)
+
+*All five custom local.rules signatures for ICMP, large ICMP, FTP, SSH and a protected HTTP path.*
+
+### 10. Test the SSH detection rule
+
+The Kali screenshot shows this test:
+
+```bash
+ssh msfadmin@172.30.1.26
+```
+
+The terminal displayed the host-key authenticity prompt, which demonstrates an attempted SSH connection. It does **not** show a completed authenticated login.
+
+Snort subsequently logged multiple alerts with signature **`[1:1000004:1] SSH connection detected`** and traffic directed to `172.30.1.26:22`. This validates that the custom TCP port-22 rule matched the observed traffic.
+
+![22 ssh connection test](screenshots/22-ssh-connection-test.png)
+
+*Kali SSH connection attempt to 172.30.1.26 and initial host-key verification prompt.*
+
+![23 ssh custom rule alerts](screenshots/23-ssh-custom-rule-alerts.png)
+
+*Snort SSH connection detected events with custom SID 1000004.*
+
+### 11. Run a separate TCP SYN scan and inspect further alerts
+
+Kali performed:
 
 ```bash
 nmap -sS 172.30.1.26
 ```
 
-| Argument | Meaning |
-|---|---|
-| `nmap` | Starts the Nmap network scanner. |
-| `-sS` | Performs a TCP SYN scan, which typically determines port states from TCP handshake responses. |
-| `172.30.1.26` | Lab IP selected as the scan target. |
+- `nmap`: network scanning tool.
+- `-sS`: TCP SYN scan, generally used to infer port state from TCP responses.
+- `172.30.1.26`: the lab test endpoint.
 
-**Actual Nmap results in the screenshot:**
+**Observed result:** The host was reachable and **`22/tcp open ssh`** appeared in the scan output. A following Snort capture includes additional custom SSH detections and built-in SNMP-related signatures. Since the screenshots do not unambiguously tie every alert to the exact Nmap packet sequence, I have not attributed all of those events directly to the scan.
 
-- Host was up.
-- **`22/tcp open ssh`**.
-- **999 scanned TCP ports closed** (reset).
-- MAC address recognized as an Oracle VirtualBox virtual network adapter.
+![24 nmap syn scan test](screenshots/24-nmap-syn-scan-test.png)
 
-![Nmap SYN scan](screenshots/11-kali-nmap-syn-scan.png)
+*Kali nmap -sS against 172.30.1.26 showing 22/tcp open.*
 
-*Figure 11 — Nmap service scan of the lab endpoint; SSH was open on port 22.*
+![25 follow up snort alerts](screenshots/25-follow-up-snort-alerts.png)
 
-**Important distinction:** The Nmap screenshot documents **port enumeration**, while the Snort console screenshot documents **ICMP signature alerts**. The evidence does not establish that the SYN scan generated a Snort alert. I have not presented it as a blocked scan or as proof of SYN-scan detection.
+*Follow-up Snort console showing custom SSH events and built-in SNMP-related signatures.*
 
 ---
 
-## 4. Results and security analysis
+## Results and evidence summary
 
-| Test | Observed evidence | Conclusion |
+| Test / configuration | Evidence | What it demonstrates |
 |---|---|---|
-| VM provisioned | `SnortVM(IDS)` in VirtualBox; Ubuntu installer and console | Snort lab host was prepared and booted. |
-| Network interfaces | Kali `172.30.1.20`; Ubuntu installer `172.30.1.23`; later endpoint `172.30.1.26` | Multiple addresses/stages documented; final mapping not fully proven. |
-| ICMP reachability | Five successful replies to `ping 172.30.1.26` | Connectivity confirmed for the test. |
-| Snort configuration | Snort 2.9.20 validation success | IDS configuration loaded successfully in the captured test. |
-| Live IDS monitoring | ICMP-related alert lines shown in console | Snort generated alerts for matching traffic. |
-| Saved-log review | Snort `-r` command visible | Workflow prepared; output not shown. |
-| Port reconnaissance | Nmap reports SSH on `22/tcp` | Host's exposed SSH service identified. |
+| Virtual Snort sensor configured | Ubuntu/VirtualBox screens | The test system was provisioned. |
+| Snort `HOME_NET` set | `snort.conf` screenshot | The lab subnet was represented in configuration. |
+| Snort validation | Snort 2.9.20 output | Configuration passed the recorded test. |
+| First custom ICMP signature | `local.rules`, SID `1000001` | Rule creation and alert matching. |
+| Large-payload ICMP signature | `local.rules`, `ping -s 501`, SID `1000002` alerts | Threshold-based signature tested against controlled traffic. |
+| FTP detection rule | `local.rules`, SID `1000003` | Rule authored, alert activation not independently demonstrated. |
+| SSH detection rule | SSH attempt, SID `1000004` alerts | The authored port-22 rule matched TCP activity. |
+| Protected HTTP path rule | `local.rules`, SID `1000005` | Rule authored, matching HTTP event not independently demonstrated. |
+| Packet review | Snort saved-log screenshot | ICMP Echo/Echo Reply details were inspected. |
+| Nmap scan | Kali `-sS` screenshot | Test endpoint had an open SSH service. |
 
-### What I learned
+### Lessons learned
 
-1. **Traffic capture depends on interface selection.** Even correct detection rules cannot inspect traffic that never reaches the monitored interface.
-2. **A configuration test is different from an alert test.** `-T` establishes whether Snort can load configuration; live monitoring establishes whether it sees and reports matching traffic.
-3. **Alerts need context.** The protocol, source/destination, rule SID, timestamp, and priority help determine what activity produced an event.
-4. **A ping alert is not automatically a security incident.** ICMP is frequently used for legitimate diagnostics. Source context and volume matter.
-5. **Detection does not imply prevention.** This lab provides evidence of alerting, not blocking.
-6. **Lab documentation should preserve uncertainty.** The Ubuntu installer, booted host, and later test show different stages, so IP addresses and system roles are described as observed—not harmonized through guesswork.
+1. **Configuration matters:** The correct capture interface and `HOME_NET` scope are prerequisites for meaningful network monitoring.
+2. **Custom signatures can be validated:** I wrote a simple ICMP rule, added a payload-size threshold, and checked for matching Snort SIDs in the output.
+3. **Port-based rules are broad:** An SSH or FTP port match signals traffic to that service, not a successful compromise.
+4. **Detection is not prevention:** This lab records Snort IDS alerts; there is no verified active blocking or firewall enforcement evidence.
+5. **Alert context matters:** I compared source/destination addresses, protocol, rule SID and timestamps with the test traffic before interpreting a detection.
 
-## 5. Troubleshooting checklist for reproduction
+## Repository contents
 
-The following are **recommended checks** for someone recreating the lab; the source screenshots do **not** show that every command below was executed.
+```text
+Snort-Intrusion-Detection/
+├── README.md
+├── SCREENSHOT-GUIDE.md
+├── UPLOAD-INSTRUCTIONS.txt
+├── rules/
+│   └── local.rules
+└── screenshots/
+    └── 25 source-verified images, ordered by the walkthrough
+```
 
-| Symptom | Check |
-|---|---|
-| The test host cannot be reached | Use `ip address` on both Linux hosts and compare network settings; verify VirtualBox adapter modes and IP masks. |
-| Snort starts with errors | Rerun the documented `snort -T ...` command and review reported parsing/configuration errors. |
-| No console alerts | Confirm you are using the correct capture interface (`enp0s8` in this test), enabled rules, and actual traffic on that interface. |
-| Ping succeeds but no relevant alert fires | Verify the configured rules match the traffic type and that Snort can observe the connection. |
-| Saved log cannot be opened | Verify the exact filename under `/var/log/snort` before using `-r`; do not assume the sample filename exists on another machine. |
-| SYN scan finds no expected services | Review the target's services, firewall behavior, and TCP port states. |
+The `SCREENSHOT-GUIDE.md` maps every renamed screenshot to the original embedded image number in the source Word document, so every figure can be checked.
 
-## 6. Project scope and limitations
+## Scope and safety
 
-- This is an **authorized virtual lab**, not a scan of an external production environment.
-- Source: `Cyber Home Lab Doc 1.docx`; images retained here are authentic screenshots from that document, placed by technical subject.
-- The original Snort rule text, full `snort.conf`, packet-capture files, and full saved-log output were not supplied; they are **not fabricated here**.
-- The VM screenshots document different addressing and installation stages, not a guaranteed current production topology.
-- The source shows **Snort detection** but does not establish inline IPS blocking or confirm that the Nmap scan itself raised an alert.
+This is a controlled educational network-security exercise. Snort 2.9.20 is an older major version; rules and configuration shown here are historical lab evidence, not a turnkey current production deployment. Traffic generation and scanning are described only for systems within the authorized virtual lab. The source images do not show a pfSense-based Snort setup, so the project does not claim one.
 
-## 7. References
+## References
 
 - [Snort official website](https://www.snort.org/)
-- [Ubuntu Server](https://ubuntu.com/server)
-- [Kali Linux](https://www.kali.org/)
+- [Snort rules documentation](https://docs.snort.org/)
 - [Nmap reference guide](https://nmap.org/book/man.html)
-- [Oracle VirtualBox](https://www.virtualbox.org/)
-
----
+- [Ubuntu documentation](https://documentation.ubuntu.com/server/)
 
 **Portfolio:** [KerberosAC](https://github.com/KerberosAC) · [LinkedIn](https://www.linkedin.com/in/alexandercox25/)

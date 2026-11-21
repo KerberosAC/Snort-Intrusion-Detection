@@ -1,24 +1,43 @@
-# Screenshot Identification Guide
+# Screenshot guide — Snort-only evidence
 
-All screenshots below were sourced from `Cyber Home Lab Doc 1.docx` and reviewed against the content of each image. The source images had already been curated in the Cybersecurity Virtual Lab project; the first column is the source-extraction filename.
+Original source: `Cyber Home Lab Doc 1.docx` (embedded `word/media/imageN.png`).
 
-| Source screenshot | GitHub screenshot | Visible evidence |
+These screenshots were selected specifically for the Ubuntu/Snort intrusion-detection exercise. The first image is Kali's network configuration relevant to the Snort tests; the remainder are the contiguous Snort/Ubuntu sequence. **pfSense begins at the original `image49.png` and was deliberately excluded.**
+
+| Source image | Renamed file | What it actually shows |
 |---|---|---|
-| `49-snort-vm-virtualbox-settings.png` | `screenshots/01-snort-vm-virtualbox-settings.png` | SnortVM virtual hardware: Ubuntu 64-bit, 4096 MB RAM, two CPUs, 45 GB virtual disk and mounted Ubuntu installer image. |
-| `02-kali-internal-network-vulnlabs.png` | `screenshots/02-kali-internal-lab-network.png` | Kali adapter set to an internal network named VulnLabs during one configuration stage; does not establish SnortVM adapter membership. |
-| `18-ubuntu-server-installation-snortvm.png` | `screenshots/03-snortvm-ubuntu-installation.png` | Ubuntu installer running in the VM named SnortVM(IDS). |
-| `19-ubuntu-server-terminal-setup.png` | `screenshots/04-snortvm-installer-network-settings.png` | Ubuntu installer shows enp0s3 at 192.168.100.216/24 and enp0s8 at 172.30.1.23/24 at this point in setup. |
-| `20-ubuntu-server-post-install-console.png` | `screenshots/05-ubuntu-post-install-update.png` | Later booted console reports Ubuntu 24.04.5 LTS, enp0s3 address 192.168.100.216, and sudo apt-get update. |
-| `05-kali-network-interface-configuration.png` | `screenshots/06-kali-network-interface-ip.png` | ip address on Kali: eth0 192.168.100.207/24 and eth1 172.30.1.20/24 in a recorded lab stage. |
-| `21-kali-ubuntu-reachability-validation.png` | `screenshots/07-kali-ping-172-30-1-26.png` | Kali ping 172.30.1.26 returns five successful replies and zero packet loss. |
-| `22-snort-installation-workflow.png` | `screenshots/08-snort-config-validation.png` | Snort 2.9.20 prints configuration validation success; the shell shows the -T config test command. |
-| `24-snort-monitoring-output.png` | `screenshots/09-snort-console-icmp-alerts.png` | Snort console events include ICMP PING speedera, Large ICMP Detected Alex, and ICMP has been Detected between 172.30.1.20 and 172.30.1.26. |
-| `23-snort-test-traffic-or-logs.png` | `screenshots/10-snort-saved-log-review-command.png` | Terminal shows sudo snort -v -r /var/log/snort/snort.log.1792625255 | less; no resulting listing is visible. |
-| `25-nmap-scan-during-ids-testing.png` | `screenshots/11-kali-nmap-syn-scan.png` | nmap -sS 172.30.1.26 reports host up, port 22/tcp SSH open, and 999 scanned ports closed. |
+| `image8.png` | `screenshots/01-kali-network-interfaces.png` | Kali `ip address` output: eth1 on 172.30.1.20/24; eth0 on a separate subnet. |
+| `image26.png` | `screenshots/02-snortvm-virtualbox-overview.png` | VirtualBox configuration of SnortVM(IDS), its Ubuntu guest OS and allocated resources. |
+| `image25.png` | `screenshots/03-ubuntu-server-download.png` | Ubuntu Server download page consulted during lab preparation. |
+| `image27.png` | `screenshots/04-ubuntu-server-install-options.png` | Ubuntu Server installation-option screen. |
+| `image28.png` | `screenshots/05-ubuntu-installer-network-configuration.png` | Ubuntu installer showing available virtual network interfaces. |
+| `image31.png` | `screenshots/06-ubuntu-installation-progress.png` | Ubuntu Server installation/progress screen. |
+| `image29.png` | `screenshots/07-ubuntu-server-post-install-setup.png` | Ubuntu Server console following installation. |
+| `image30.png` | `screenshots/08-kali-ping-test.png` | Kali successfully pinging 172.30.1.26 with five replies and zero packet loss. |
+| `image32.png` | `screenshots/09-snort-conf-edit-in-nano.png` | Editing /etc/snort/snort.conf with GNU nano. |
+| `image33.png` | `screenshots/10-snort-home-net-settings.png` | Snort HOME_NET set to 172.30.1.0/24 in snort.conf. |
+| `image34.png` | `screenshots/11-snort-configuration-validation.png` | Snort 2.9.20 output reporting successful configuration validation. |
+| `image35.png` | `screenshots/12-snort-rule-engine-initialization.png` | Snort rule engine/initialization output from the validation workflow. |
+| `image36.png` | `screenshots/13-custom-rule-icmp-initial.png` | First custom local.rules signature: ICMP detection, SID 1000001. |
+| `image37.png` | `screenshots/14-local-rules-and-monitor-command.png` | ICMP rule in local.rules and Snort live-monitoring command visible in terminal. |
+| `image38.png` | `screenshots/15-initial-icmp-console-alerts.png` | Snort console monitoring alongside Kali ping traffic. |
+| `image39.png` | `screenshots/16-snort-saved-log-command.png` | Command for reading a saved Snort packet log with less. |
+| `image40.png` | `screenshots/17-snort-replayed-icmp-packets.png` | Saved-log review showing ICMP Echo and Echo Reply packet data. |
+| `image41.png` | `screenshots/18-icmp-and-large-icmp-rules.png` | Custom ICMP and large-payload ICMP rules, SIDs 1000001 and 1000002. |
+| `image42.png` | `screenshots/19-kali-standard-and-large-ping.png` | Standard ping and ping -s 501 tests from Kali. |
+| `image43.png` | `screenshots/20-large-icmp-alert-results.png` | Snort alerts for standard and large ICMP packets, including the SID 1000002 rule. |
+| `image44.png` | `screenshots/21-five-custom-snort-rules.png` | All five custom local.rules signatures for ICMP, large ICMP, FTP, SSH and a protected HTTP path. |
+| `image45.png` | `screenshots/22-ssh-connection-test.png` | Kali SSH connection attempt to 172.30.1.26 and initial host-key verification prompt. |
+| `image46.png` | `screenshots/23-ssh-custom-rule-alerts.png` | Snort SSH connection detected events with custom SID 1000004. |
+| `image47.png` | `screenshots/24-nmap-syn-scan-test.png` | Kali nmap -sS against 172.30.1.26 showing 22/tcp open. |
+| `image48.png` | `screenshots/25-follow-up-snort-alerts.png` | Follow-up Snort console showing custom SSH events and built-in SNMP-related signatures. |
 
-## Notes
+## Custom-rule evidence
 
-- The Ubuntu ISO shown in the VirtualBox VM details is not the same version as the later booted Ubuntu screen; both are presented as separate stages.
-- `172.30.1.23` appears on the SnortVM installer screen. `172.30.1.26` appears in later ping, Snort, and Nmap evidence; a precise address-change history was not provided.
-- The Snort alerts demonstrate detection and logging, not traffic prevention.
-- The source does not include raw Snort rules or a full PCAP; do not add reconstructed rules to the README as though they were original evidence.
+- `image36.png`: first ICMP rule (SID 1000001).
+- `image41.png`: added size-aware ICMP rule (SID 1000002).
+- `image44.png`: the full five-rule set (SIDs 1000001–1000005).
+- `image43.png`: console matches for ICMP SIDs 1000001 and 1000002.
+- `image46.png`: console matches for SSH SID 1000004.
+
+The screenshot set does **not** independently demonstrate a successful FTP or protected-HTTP-path rule match. Their definitions are included as authored rules, with this limitation noted in the README.
